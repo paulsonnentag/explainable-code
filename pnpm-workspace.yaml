@@ -1,0 +1,6 @@
+# pnpm 11 reads its settings from this file.
+minimumReleaseAge: 0
+verifyDepsBeforeRun: false
+allowBuilds:
+  cbor-extract: true
+  esbuild: true

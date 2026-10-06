@@ -1,0 +1,48 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font: 14px/1.5 system-ui, sans-serif;
+  color: #18181b;
+  background: #fafafa;
+}
+
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+}
+
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+.nav {
+  width: 200px;
+  flex: none;
+  padding: 16px;
+  border-right: 1px solid #e4e4e7;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav a {
+  color: #52525b;
+  text-decoration: none;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.nav a.active {
+  background: #e4e4e7;
+  color: #18181b;
+}
+
+.main {
+  flex: 1;
+  padding: 24px 32px;
+  min-width: 0;
+}

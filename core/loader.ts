@@ -1,26 +1,20 @@
-// Behaviors are linked by url. The app hands over the ones it hosts (bundled,
-// so they share its single copy of every library); any other url is imported
-// as is.
-
-import type { Run } from "./environment"
+// Behaviors and views are linked by url. The app hands over the modules it
+// hosts (bundled, so they share its single copy of every library); any other
+// url is imported as is.
 
 export type Hosted = Record<string, () => Promise<unknown>>
-export type Load = (url: string) => Promise<Run>
+/** The default export of the module at `url`. */
+export type Load = <T>(url: string) => Promise<T>
 
 export function createLoader(hosted: Hosted): Load {
-  const loaded = new Map<string, Promise<Run>>()
-  return (url) => {
-    let run = loaded.get(url)
-    if (!run) {
+  const loaded = new Map<string, Promise<unknown>>()
+  return <T>(url: string) => {
+    let module = loaded.get(url)
+    if (!module) {
       const load = hosted[url] ?? (() => import(/* @vite-ignore */ url))
-      run = load().then((module) => (module as { default: Run }).default)
-      loaded.set(url, run)
+      module = load().then((module) => (module as { default: unknown }).default)
+      loaded.set(url, module)
     }
-    return run
+    return module as Promise<T>
   }
-}
-
-/** `/behaviors/history/group/index.ts` → `/behaviors/history/group`. */
-export function behaviorName(url: string): string {
-  return url.replace(/\/index\.[jt]s$/, "")
 }

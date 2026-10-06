@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "isolatedModules": true
   },
-  "include": ["core", "src", "behaviors", "scripts", "vite.config.ts"]
+  "include": ["core", "src", "behaviors", "views", "scripts", "vite.config.ts"]
 }

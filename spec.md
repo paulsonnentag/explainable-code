@@ -88,8 +88,10 @@ The formula closes at the `]` that balances it. Brackets, braces and parens
 are counted; strings, template literals (including their `${…}`) and comments
 are skipped, so `doc["@patchwork"]` and `a[0]` are fine inside.
 
-A candidate followed directly by `(`, `[` or `:` is not a formula; it stays
-markdown, so links, reference links and link definitions keep working. Nothing
+A candidate followed directly by `(` or `[` is not a formula; it stays
+markdown, so links and reference links keep working. Link definitions
+(`[x]: url` on a line of its own) are taken by the block lexer before
+formulas are looked for, so `[document]:` in a sentence is a reference. Nothing
 inside code spans, other code blocks or HTML is a formula. An `[identifier]`
 that isn't declared is plain text.
 
@@ -104,40 +106,72 @@ Any other `js` block is an ordinary code block.
 ### Chips
 
 A declaration renders as its name, styled as a chip, with a dot for its state:
-pending or failed. Hovering it shows the source and the current value, drawn
-with the default renderer. A block declaration renders the chip on its own
-line and the source folded under it; clicking the chip unfolds it.
+pending or failed. A reference renders as the same chip.
 
-A reference renders as the same chip. Hovering any chip highlights the
-declaration and every reference to the name; clicking a reference scrolls to
-the declaration.
+- **Hovering** a chip highlights every chip with that name and every embed of
+  the value the name holds, whether a view of it or the value itself. It shows
+  nothing.
+- **Clicking** a declaration's chip unfolds the name's code, with the error if
+  the formula failed. Code on one line of at most 60 characters unfolds inline,
+  right after the chip (`groups = grouped_history.groups`); anything longer
+  unfolds below the line, as a card whose caret points up at the chip. Clicking
+  again folds it. Chips have no selected state.
+- **Clicking** any other chip (a reference in the prose, a caption, a url in
+  data) unfolds the code at the declaration and scrolls there.
+
+A formula's code has one place on the page, where it is declared, and is
+either unfolded there or not.
+
+A block declaration renders nothing until the code is revealed (see
+[Revealing the code](#revealing-the-code)); the prose refers to it.
 
 ### Values
 
 An embed draws its value with the default renderer:
 
-| Value                       | Drawn as                                                         |
-| --------------------------- | ---------------------------------------------------------------- |
-| A DOM `Node`                | Mounted as is                                                    |
-| `undefined`, `null`         | Nothing                                                          |
-| string, number, boolean     | Text                                                             |
-| A 64-digit hex string       | Its first 8 digits; the whole string on hover                    |
-| An array                    | A list, each item drawn by these rules                           |
-| A `Uint8Array`              | `<n bytes>`                                                      |
-| A `Date`                    | Its local date and time                                          |
-| A function                  | `ƒ name`                                                         |
-| Any other object            | A collapsible tree, each leaf drawn by these rules               |
-| Pending                     | A spinner                                                        |
-| An error                    | A red chip with the message; the stack on hover                  |
+| Value                       | Drawn as                                                     |
+| --------------------------- | ------------------------------------------------------------ |
+| A node `View` returned      | The view in its frame, captioned (see below)                 |
+| Any other DOM `Node`        | Mounted as is                                                |
+| `undefined`, `null`         | Nothing at the top; `undefined`, `null` inside data          |
+| A string                    | Text at the top; quoted, like JSON, inside data              |
+| number, boolean             | Text                                                         |
+| A 64-digit hex string       | Its first 8 digits; the whole string on hover                |
+| An array or object          | Written out like JSON: brackets, quoted keys, commas         |
+| A `Uint8Array`              | `<n bytes>`                                                  |
+| A `Date`                    | Its local date and time                                      |
+| A function                  | `ƒ name`                                                     |
+| Pending                     | A spinner                                                    |
+| An error                    | A red chip with the message; the stack on hover              |
 
-In a tree, a string that is the url of a declared document is drawn as that
-name's chip.
+Clicking an array's or object's bracket folds it to a count ("3 keys"); the
+top two levels start unfolded, deeper ones only when they hold at most four
+plain values. Inside data, a string that is the url of a declared document is
+drawn as that name's chip.
+
+A view's caption names what it shows, as the name's chip, and the view, from
+its url: `View("/views/history/index.ts", grouped_history)` is captioned
+"grouped history as history".
+
+An embed on its own (a block) is either a view or a declared name. A block
+embed of any other value is an error asking for the value to be declared and
+its name embedded; a named value is drawn in a frame, captioned with its chip.
+Inline embeds may be any expression.
 
 ### Layout
 
 A formula inside text renders inline. A paragraph that holds only embeds
-(and whitespace) renders its embeds as blocks in a row, wrapping when they
-don't fit. A declaration is always inline.
+(and whitespace) renders its embeds as blocks, each in a frame, in a single
+row that spans the page: one embed takes the full width, several share it
+equally. A declaration is always inline.
+
+### Revealing the code
+
+A "Show code" button at the top of the page unfolds every formula's code:
+each declaration's, exactly as clicking its chip would, block declarations in
+full, and every embed that isn't a bare name, on a card above its frame (or
+inline, before an inline embed's value). "Hide code" folds them all. Between
+the two, chips fold and unfold one at a time.
 
 ## 3. Evaluation
 
@@ -359,11 +393,13 @@ show draws a short message saying so.
     new document `{ "@patchwork": { type: "grouped-history" }, groups: [] }`,
     created in the same run.
   - That document's `groups`, whenever the grouping changes: newest first,
-    each `{ start, end, heads }` — the times (seconds) of its oldest and newest
-    change, and the heads after its newest change. A new group starts where
-    two neighbouring changes are more than ten minutes apart. Changes whose
-    ops all lie under `@patchwork` don't count, so writing the link doesn't
-    make a group of its own.
+    each `{ additions, deletions, end, heads, start }`. A new group starts
+    where two neighbouring changes are more than ten minutes apart. `start`
+    and `end` are the times (seconds) of its oldest and newest change, `heads`
+    the heads after its newest change. `additions` counts every insert, set,
+    make and mark its changes made, `deletions` every delete. Ops under
+    `@patchwork` don't count, and a change with nothing else belongs to no
+    group, so writing the link doesn't make a group of its own.
 - Puts: nothing.
 
 **`/views/markdown/index.ts`** — a text editor over `data/content`.
@@ -372,94 +408,25 @@ show draws a short message saying so.
   `data/content`.
 - Writes: `data/content`, with `updateText`, as you type.
 
-**`/views/grouped-history/index.ts`** — the groups as rows: "10 minutes ago",
-"1 hour ago".
+**`/views/history/index.ts`** — a grouped history document as rows: "10
+minutes ago", "1 hour ago", each with what it added and deleted (`+50 −1`).
 
-- Reads: `data/groups`. Ticks its own clock, once a minute, for the relative
-  times.
+- Reads: `data/@patchwork/type` (anything but `"grouped-history"` gets a
+  message), `data/groups`. Ticks its own clock, once a minute, for the
+  relative times.
 - Writes: nothing.
 
 ### The explanation
 
-`/explanations/grouped-history.md`:
+[`explanations/grouped-history.md`](explanations/grouped-history.md). It opens
+with the recipe as markdown next to its grouped history, then builds the history up: the
+recipe, written in two sittings with `Automerge.updateText`; its history; the
+groups; and the grouped history document, linked from the recipe.
 
-`````md
----
-behaviors:
-  - /behaviors/history/group/index.ts
----
-
-# Grouped history
-
-[=View("/views/markdown/index.ts", document)] [=View("/views/grouped-history/index.ts", grouped_history)]
-
-Every edit to a document is a change, and a sentence is dozens of them, so a
-history read change by change is too fine to follow. Grouped history gathers
-the changes made close together in time into one entry. The history then
-reads as sittings: what happened ten minutes ago, what happened this morning.
-
-## A document and its history
-
-Take a [document] written in two sittings: two edits a couple of minutes
-apart three hours ago, and one more an hour ago.
-
-```js document =
-const hour = 60 * 60
-const now = Math.floor(Date.now() / 1000)
-let doc = Automerge.init()
-doc = Automerge.change(doc, { time: now - 3 * hour }, (d) => {
-  d["@patchwork"] = { type: "markdown" }
-  d.content = "My"
-})
-doc = Automerge.change(doc, { time: now - 3 * hour + 120 }, (d) => {
-  d.content = "My cool"
-})
-doc = Automerge.change(doc, { time: now - hour }, (d) => {
-  d.content = "My cool document"
-})
-return repo.import(Automerge.save(doc))
-```
-
-Each change is stamped with the time it was made. Together the changes are
-the document's [history = Automerge.getHistory(document)], oldest first:
-
-[=history.map(({ change }) => ({ hash: change.hash, time: new Date(change.time * 1000) }))]
-
-## Grouping by time
-
-A new group starts wherever two neighbouring changes are more than ten minutes
-apart. The groups are kept in the document's
-[grouped_history = repo.find(document["@patchwork"].groupedHistory)], newest
-first:
-
-[=grouped_history.groups]
-
-Each group has the time of its first change (`start`) and of its last
-(`end`), in seconds, and the `heads` after its last change: the version of the
-document the sitting left behind.
-
-The newest change in the history is not an edit. It only touches
-`@patchwork`, the part of a document that describes it rather than holding its
-content, so it belongs to no group. It is the link below.
-
-## Where it's stored
-
-The groups aren't kept in the [document] itself, which holds only what its
-author wrote. They live in a document of their own, the [grouped_history],
-and the original links to it at `@patchwork.groupedHistory`:
-
-[=grouped_history] [=document]
-
-Any document with a `@patchwork.type` gets one. The grouped history is
-created and linked the first time the document is seen, and its groups are
-rewritten whenever the document changes. Its own type is `grouped-history`,
-and a grouped history is never grouped in turn.
-`````
-
-What the reader sees on load: two groups, "1 hour ago" and "3 hours ago", and
-four changes in the history, the newest of them the link. Typing in the editor
-adds a change to the history, and after a pause of more than ten minutes, a
-new group.
+What the reader sees on load: two groups, "1 hour ago" (`+50 −1`) and "3 hours
+ago" (`+49 −0`), and four changes in the history, the newest of them the link.
+Typing in the editor adds a change to the history, and a "just now" group at
+the top.
 
 ## 8. Code
 
@@ -474,12 +441,12 @@ core/
   frontmatter.ts     splits and parses the frontmatter
   parse.ts           markdown → blocks, inline formulas, block formulas
   evaluate.ts        formulas → memos: lookup, states, cycles, documents
-  render.ts          the default renderer, chips, layout
+  render.tsx         the default renderer, chips, layout
   host.ts            scopes, behaviors, View
   Explanation.tsx    puts it together
 behaviors/history/group/index.ts
 views/markdown/index.ts
-views/grouped-history/index.ts
+views/history/index.ts
 explanations/grouped-history.md
 src/                 the app: navigation over /explanations/*.md
 ```

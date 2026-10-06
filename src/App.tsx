@@ -14,6 +14,7 @@ export function App(props: { runtime: Runtime }) {
   return (
     <div class="app">
       <nav class="nav">
+        <div class="brand">Explorable code</div>
         <For each={names}>
           {(name) => (
             <a href={`#${name}`} classList={{ active: name === selected() }}>
@@ -28,7 +29,7 @@ export function App(props: { runtime: Runtime }) {
           keyed
           fallback={<div class="error">No explanation for “{selected()}”.</div>}
         >
-          {(text) => <Explanation markdown={text} runtime={props.runtime} />}
+          {(text) => <Explanation name={selected()} markdown={text} runtime={props.runtime} />}
         </Show>
       </main>
     </div>

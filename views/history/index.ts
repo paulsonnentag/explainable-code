@@ -3,6 +3,7 @@
 
 import { onCleanup } from "solid-js"
 import type { Env } from "../../core"
+import { figure } from "../figure"
 
 type Group = { additions: number; deletions: number; start: number; end: number; heads: string[] }
 type GroupedHistory = { "@patchwork"?: { type?: string }; groups?: Group[] }
@@ -11,7 +12,7 @@ const MINUTE = 60
 
 export default function history(env: Env): Node {
   const data = env.get<GroupedHistory>("data")
-  if (data.value?.["@patchwork"]?.type !== "grouped-history") return message("Not a grouped history")
+  if (data.value?.["@patchwork"]?.type !== "grouped-history") return figure(env, "history", message("Not a grouped history"))
 
   const list = document.createElement("div")
   const draw = () => {
@@ -22,7 +23,7 @@ export default function history(env: Env): Node {
   const tick = setInterval(draw, MINUTE * 1000)
   onCleanup(() => clearInterval(tick))
   onCleanup(data.subscribe(draw))
-  return list
+  return figure(env, "history", list)
 }
 
 function row(group: Group, now: number): HTMLElement {

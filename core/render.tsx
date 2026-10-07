@@ -1,10 +1,10 @@
 // What goes in a formula's placeholder: an embed's value, drawn by the default
-// renderer, or a name as a chip.
+// renderer, or a name as a chip. A node is mounted as it is; views caption
+// themselves, drawing names with `<explanation-name>`.
 
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type Accessor, type JSX } from "solid-js"
 import { render } from "solid-js/web"
 import type { State } from "./evaluate"
-import type { Shows } from "./host"
 import type { Formula } from "./parse"
 
 /** What every placeholder on a page shares. */
@@ -14,8 +14,6 @@ export type Page = {
   declaration(name: string): Formula | undefined
   /** The name declared for a document's url, or for a value. */
   nameOf(urlOrValue: unknown): string | undefined
-  /** What a node returned by `View` shows. */
-  viewOf(node: Node): Shows | undefined
   hovered: Accessor<string | undefined>
   hover(name: string | undefined): void
   /** Whether a formula's code is unfolded. Tracked. */
@@ -197,6 +195,37 @@ function Unfolded(props: { formula: Formula; page: Page }) {
   )
 }
 
+/** The page around each explanation, for the names views draw. */
+export const pages = new WeakMap<Element, Page>()
+
+/**
+ * `<explanation-name name="recipe">`, or `url="automerge:…"` for a document:
+ * a name's chip, for views to draw. Outside an explanation, just the text.
+ */
+class NameElement extends HTMLElement {
+  #dispose: (() => void) | undefined
+
+  connectedCallback() {
+    const name = this.getAttribute("name")
+    const url = this.getAttribute("url")
+    const article = this.closest(".explanation")
+    const page = article ? pages.get(article) : undefined
+    if (!page) {
+      this.textContent = name ? displayName(name) : (url ?? "")
+      return
+    }
+    this.textContent = ""
+    this.#dispose = render(() => (name ? <Chip name={name} page={page} /> : <Url url={url ?? ""} page={page} />), this)
+  }
+
+  disconnectedCallback() {
+    this.#dispose?.()
+    this.#dispose = undefined
+  }
+}
+
+if (!customElements.get("explanation-name")) customElements.define("explanation-name", NameElement)
+
 /** `grouped_history` → "grouped history". */
 export function displayName(name: string): string {
   return name.replaceAll("_", " ")
@@ -233,9 +262,8 @@ export function Code(props: { source: string; page: Page }) {
 }
 
 /**
- * A state: a spinner, an error, or the value. As a block, a view sits in its
- * frame captioned with what it shows; anything else must be a named value, and
- * is captioned with its name.
+ * A state: a spinner, an error, or the value. As a block, a node is mounted as
+ * it is; anything else must be a named value, and is captioned with its name.
  */
 function Shown(props: { state: () => State; page: Page; block: boolean; named: string | undefined }) {
   const status = createMemo(() => props.state().status)
@@ -259,11 +287,7 @@ function Shown(props: { state: () => State; page: Page; block: boolean; named: s
 }
 
 function drawTop(value: unknown, page: Page, block: boolean, named: string | undefined): JSX.Element {
-  if (value instanceof Node) {
-    const shows = page.viewOf(value)
-    if (shows) return <Figure node={value} shows={shows} page={page} />
-    if (!block) return value
-  }
+  if (value instanceof Node) return value
   const content = isComposite(value) ? (
     <span class="json">
       <Json value={value} page={page} depth={0} />
@@ -277,36 +301,17 @@ function drawTop(value: unknown, page: Page, block: boolean, named: string | und
   if (!named)
     return (
       <div class="frame frame-data">
-        <Failure error={new Error("Only a view or a named value can be embedded on its own. Declare this value and embed its name.")} />
+        <Failure error={new Error("Only a node, such as a view, or a named value can be embedded on its own. Declare this value and embed its name.")} />
       </div>
     )
   return (
-    <figure class="figure" classList={{ highlighted: page.hovered() === named }}>
-      <div class="frame frame-data">{value instanceof Node ? value : content}</div>
+    <figure class="figure" data-name={named}>
+      <div class="frame frame-data">{content}</div>
       <figcaption class="caption">
         <Chip name={named} page={page} />
       </figcaption>
     </figure>
   )
-}
-
-/** A view in its frame, captioned with the value it shows and the view it is shown as. */
-function Figure(props: { node: Node; shows: Shows; page: Page }) {
-  const name = () => props.page.nameOf(props.shows.document ?? props.shows.data)
-  return (
-    <figure class="figure" classList={{ highlighted: name() !== undefined && props.page.hovered() === name() }}>
-      <div class="frame">{props.node}</div>
-      <figcaption class="caption">
-        <Show when={name()}>{(shown) => <Chip name={shown()} page={props.page} />}</Show>
-        <span class="caption-view">as {viewName(props.shows.view)}</span>
-      </figcaption>
-    </figure>
-  )
-}
-
-/** `/views/history/index.ts` → "history". */
-function viewName(url: string): string {
-  return (url.replace(/\/index\.[jt]sx?$/, "").split("/").pop() ?? url).replaceAll("-", " ")
 }
 
 function Failure(props: { error: unknown }) {

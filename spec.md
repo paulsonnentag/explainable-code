@@ -133,8 +133,7 @@ An embed draws its value with the default renderer:
 
 | Value                       | Drawn as                                                     |
 | --------------------------- | ------------------------------------------------------------ |
-| A node `View` returned      | The view in its frame, captioned (see below)                 |
-| Any other DOM `Node`        | Mounted as is                                                |
+| A DOM `Node`, such as a view | Mounted as is                                               |
 | `undefined`, `null`         | Nothing at the top; `undefined`, `null` inside data          |
 | A string                    | Text at the top; quoted, like JSON, inside data              |
 | number, boolean             | Text                                                         |
@@ -151,14 +150,19 @@ top two levels start unfolded, deeper ones only when they hold at most four
 plain values. Inside data, a string that is the url of a declared document is
 drawn as that name's chip.
 
-A view's caption names what it shows, as the name's chip, and the view, from
-its url: `View("/views/history/index.ts", grouped_history)` is captioned
-"grouped history as history".
+The renderer knows nothing about views: a view is a node, mounted as is. A
+view draws its own frame and caption (see [Views](#6-views)), so a new kind
+of view can caption itself however it likes.
 
-An embed on its own (a block) is either a view or a declared name. A block
+An embed on its own (a block) is either a node or a declared name. A block
 embed of any other value is an error asking for the value to be declared and
 its name embedded; a named value is drawn in a frame, captioned with its chip.
 Inline embeds may be any expression.
+
+Frames and code cards have square corners and share one border and shadow.
+Hovering a name highlights every chip with that name and every element on the
+page whose `data-name` is the name: a named value's frame, and any view that
+marks itself so.
 
 ### Layout
 
@@ -190,8 +194,8 @@ The scope is a Proxy. An identifier resolves to the first of:
 1. A declared name: its current value.
 2. A slot visible from the explanation's scope: `env.get(identifier).value`.
    This is how `repo` resolves.
-3. A host global: `env`, `View`, and `Automerge`, the `@automerge/automerge`
-   module.
+3. A host global: `env`, `View`, `Run` (see [`Run`](#run)), and `Automerge`,
+   the `@automerge/automerge` module.
 4. `globalThis`.
 
 The Proxy's `has` returns true for the first three and false otherwise, so
@@ -287,8 +291,9 @@ A changed file is a new page: everything is evaluated from scratch.
 root                          repo
 └─ explanation                declared names
    ├─ document <id>           data = the document
+   │  └─ view                 name
    ├─ document <id>           data = the document
-   └─ view <n>                data = a plain value given to View
+   └─ view                    data = a plain value given to View, name
 ```
 
 - **Root** is the app's. It holds `repo`.
@@ -300,8 +305,10 @@ root                          repo
   frontmatter is attached, in order. The scope lives as long as the
   explanation. A document only reachable inside another value — a link in a
   tree — gets no scope.
-- **View scopes**: one per mount of a view on data that isn't a document. `data`
-  is bound to the value. Destroyed with the mount.
+- **View scopes**: one per mount, forked from the document's scope for a
+  document, or from the explanation for anything else, with `data` bound to
+  the value. If what the view shows has a declared name, `name` is bound to it.
+  Destroyed with the mount.
 
 ### `repo`
 
@@ -328,9 +335,10 @@ Mounts the view whose module is at `url` on `data` and returns the node it
 mounted into, right away. The node shows a spinner while the module loads and
 an error if it fails to load.
 
-- If `data` is a document, a snapshot or a handle, the view runs in that
-  document's scope.
-- Otherwise it runs in a new view scope with `data` bound to the value.
+- If `data` is a document, a snapshot or a handle, the view runs in a view
+  scope below that document's scope.
+- Otherwise it runs in a view scope below the explanation, with `data` bound
+  to the value.
 - The view's function is called inside a Solid `createRoot`; the root is
   disposed when the mount is.
 
@@ -343,6 +351,35 @@ be rebuilt — and lose focus — on every keystroke.
 
 Views are loaded by the same loader as behaviors: hosted modules first, any
 other url imported as is.
+
+### `Run`
+
+```ts
+Run(behavior: string, document: unknown): BehaviorRun
+
+type BehaviorRun = {
+  behavior: string
+  document: string
+  reads: string[] // every key the run asked its environment for, in order
+  puts: { key: string; value: unknown }[]
+  creates: string[] // urls of the documents it created
+  writes: { document: string; path: string[]; value: unknown }[]
+  error?: string
+}
+```
+
+What the behavior at `behavior` did in its last run on `document`. The host
+attaches every behavior to a document's scope through a recorder, which hands
+the behavior the same environment with every `get` and `put` noted. `repo`
+comes back as a repo whose `create`, `import` and `find` hand out recording
+handles, and a change through any handle is diffed with `Automerge.diff` into
+the paths it wrote. A list or a string counts as a whole: writing `groups`
+records `["groups"]`, not every index. Each path records the value there now,
+and a later change to the same path replaces the entry, so writes made from
+the behavior's subscriptions keep the record current.
+
+`Run` is tracked: the formula reruns whenever the record changes. It throws if
+`behavior` isn't in the frontmatter or `document` isn't a document.
 
 ## 5. Behaviors
 
@@ -372,13 +409,26 @@ returns the node to mount and keeps it up to date through its own
 subscriptions; it may use Solid, and `onCleanup` runs when the mount is
 disposed.
 
-- `env` is the scope it runs in: `env.get("data")` is what it shows.
+- `env` is the scope it runs in: `env.get("data")` is what it shows, and
+  `env.get("name")` the name it was declared as, if it has one.
 - It may write documents through their handles (`env.get("data").change(…)`).
 - It never puts: `put` on its `env` throws.
 - `props` is what the formula passed to `View`, or `{}`.
 
 A view is chosen by url, so there's no dispatch: a view given data it can't
 show draws a short message saying so.
+
+A view draws its own frame and caption. The views here share
+`views/figure.ts`, which frames the content and captions it with the name and
+what it is shown as ("grouped history as history"), and marks the figure with
+`data-name` so hovering the name highlights it. Its frame reads
+`--frame-border` and `--frame-ring`, which the page sets on highlighted
+elements.
+
+A view draws a name with `<explanation-name name="recipe">`, or a document by
+url with `<explanation-name url="automerge:…">`. Inside an explanation the
+element becomes the name's chip, with the chip's hover and click; elsewhere
+it is plain text. A url without a declared name is drawn as the url.
 
 ## 7. The example
 
@@ -418,12 +468,23 @@ minutes ago", "1 hour ago", each with what it added and deleted (`+50 −1`).
   relative times.
 - Writes: nothing.
 
+**`/views/behavior/index.ts`** — a `BehaviorRun`, as `Run` returns it: a
+"read" row with every key read, and a "write" row with a `+` line per write.
+Writes to the document the behavior ran on read `data/<path>: <value>`;
+created documents and writes into other documents are drawn by name. A url
+value is the document's chip; strings are quoted and cut at 40 characters;
+lists and objects are counted.
+
+- Reads: `data` (anything that isn't a run gets a message), `name`.
+- Writes: nothing.
+
 ### The explanation
 
 [`explanations/grouped-history.md`](explanations/grouped-history.md). It opens
 with the recipe as markdown next to its grouped history, then builds the history up: the
 recipe, written in two sittings with `Automerge.updateText`; its history; the
-groups; and the grouped history document, linked from the recipe.
+groups; the grouped history document, linked from the recipe; and the
+behavior's run on the recipe, as the behavior view next to the raw record.
 
 What the reader sees on load: two groups, "1 hour ago" (`+50 −1`) and "3 hours
 ago" (`+49 −0`), and four changes in the history, the newest of them the link.
@@ -443,12 +504,15 @@ core/
   frontmatter.ts     splits and parses the frontmatter
   parse.ts           markdown → blocks, inline formulas, block formulas
   evaluate.ts        formulas → memos: lookup, states, cycles, documents
-  render.tsx         the default renderer, chips, layout
-  host.ts            scopes, behaviors, View
+  render.tsx         the default renderer, chips, <explanation-name>
+  host.ts            scopes, behaviors, View, Run
+  record.ts          records a behavior's runs
   Explanation.tsx    puts it together
 behaviors/history/group/index.ts
+views/figure.ts      the frame and caption the views share
 views/markdown/index.ts
 views/history/index.ts
+views/behavior/index.ts
 explanations/grouped-history.md
 src/                 the app: navigation over /explanations/*.md
 ```

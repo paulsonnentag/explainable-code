@@ -9,5 +9,6 @@ export { createEnvironment, type Env, type Run, type Teardown } from "./environm
 export type { DocBacked, Handle } from "./handle"
 export type { Props, Runtime, View } from "./host"
 export { createLoader, type Hosted, type Load } from "./loader"
+export type { BehaviorRun } from "./record"
 export { createRepo, type Repo } from "./repo"
 export { Explanation } from "./Explanation"

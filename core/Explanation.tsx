@@ -1,11 +1,11 @@
-import { createSignal, For, onCleanup, onMount } from "solid-js"
+import { createEffect, createSignal, For, onCleanup, onMount } from "solid-js"
 import { render } from "solid-js/web"
 import type { Run } from "./environment"
 import { evaluate, type Evaluation, type State } from "./evaluate"
 import { splitFrontmatter } from "./frontmatter"
 import { createHost, type Host, type Loaded, type Runtime } from "./host"
 import { parse, type Formula, type Parsed } from "./parse"
-import { Chip, FormulaSlot, type Page } from "./render"
+import { Chip, FormulaSlot, pages, type Page } from "./render"
 
 const PENDING: State = { status: "pending" }
 
@@ -23,6 +23,7 @@ export function Explanation(props: { name: string; markdown: string; runtime: Ru
   const disposers: (() => void)[] = []
   let cancelled = false
   let prose!: HTMLDivElement
+  let article!: HTMLElement
 
   const read = readExplanation(props.markdown)
   if ("problem" in read) setProblems([read.problem])
@@ -31,7 +32,6 @@ export function Explanation(props: { name: string; markdown: string; runtime: Ru
     state: (id) => running()?.evaluation.state(id) ?? PENDING,
     declaration: (name) => ("parsed" in read ? read.declarations.get(name) : undefined),
     nameOf: (urlOrValue) => running()?.host.nameOf(urlOrValue),
-    viewOf: (node) => running()?.host.viewOf(node),
     hovered,
     hover: setHovered,
     unfolded: (id) => unfolded().has(id),
@@ -66,6 +66,14 @@ export function Explanation(props: { name: string; markdown: string; runtime: Ru
     })
   }
 
+  onMount(() => pages.set(article, page))
+
+  createEffect(() => {
+    const name = hovered()
+    for (const element of article.querySelectorAll<HTMLElement>("[data-name]:not(.chip)"))
+      element.classList.toggle("highlighted", element.dataset.name === name)
+  })
+
   onMount(() => {
     if (!("parsed" in read)) return
     prose.innerHTML = read.parsed.html
@@ -89,7 +97,7 @@ export function Explanation(props: { name: string; markdown: string; runtime: Ru
   })
 
   return (
-    <article class="explanation">
+    <article class="explanation" ref={article}>
       <div class="toolbar">
         <button class="toggle" classList={{ on: revealed() }} onClick={toggleAll}>
           {revealed() ? "Hide code" : "Show code"}

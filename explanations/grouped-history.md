@@ -71,7 +71,18 @@ recipe links to it at `@patchwork.groupedHistory`:
 
 [=recipe] [=grouped_history]
 
-Any document with a `@patchwork.type` gets one. The grouped history is
-created and linked the first time the document is seen, and its groups are
-rewritten whenever the document changes. Its own type is `grouped-history`,
-and a grouped history is never grouped in turn.
+## The behavior
+
+Both documents are written by one behavior, which runs on every document as
+soon as the document is seen. This is its
+[grouping_run = Run("/behaviors/history/group/index.ts", recipe)], everything it
+read and wrote while running on the recipe:
+
+[=View("/views/behavior/index.ts", grouping_run)] [=grouping_run]
+
+It read the recipe's `@patchwork.type`, which said the recipe is something to
+group, and its `@patchwork.groupedHistory`, which wasn't there yet. So it
+created the grouped history, linked it from the recipe, and wrote the groups
+into it. Each time the recipe changes, it writes the groups again. The grouped
+history's own type is `grouped-history`, which the behavior leaves alone, so a
+grouped history is never grouped in turn.

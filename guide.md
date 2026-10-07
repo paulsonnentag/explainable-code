@@ -69,6 +69,10 @@ behavior reads and writes, such as the history, the groups and the stored
 document, next to the views that draw them. A reader who sees only the views
 has to take the mechanism on trust.
 
+Show the behavior itself, too: declare its run on a document with
+`Run(behavior, document)` and embed it raw next to the behavior view, so the
+reader sees what it read and what it wrote before the prose says why.
+
 Name every value you embed on its own: declare it in the sentence that
 introduces it, then embed the name (`[groups = …]`, then `[=groups]`). The
 frame is captioned with that name, and hovering the name in the prose lights

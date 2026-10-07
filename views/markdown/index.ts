@@ -3,12 +3,13 @@
 import { updateText } from "@automerge/automerge-repo"
 import { onCleanup } from "solid-js"
 import type { Env } from "../../core"
+import { figure } from "../figure"
 
 type Markdown = { "@patchwork"?: { type?: string }; content?: string }
 
 export default function markdown(env: Env): Node {
   const data = env.get<Markdown>("data")
-  if (data.value?.["@patchwork"]?.type !== "markdown") return message("Not a markdown document")
+  if (data.value?.["@patchwork"]?.type !== "markdown") return figure(env, "markdown", message("Not a markdown document"))
 
   const textarea = document.createElement("textarea")
   textarea.style.cssText =
@@ -20,7 +21,7 @@ export default function markdown(env: Env): Node {
       if (textarea.value !== content) textarea.value = content
     }),
   )
-  return textarea
+  return figure(env, "markdown", textarea)
 }
 
 function message(text: string): HTMLElement {

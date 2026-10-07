@@ -43,8 +43,9 @@ export function Explanation(props: { name: string; markdown: string; runtime: Ru
     reveal(name) {
       const formula = page.declaration(name)
       if (!formula) return
-      setUnfolded(unfolded().add(formula.id))
       const placeholder = placeholders.get(formula.id)
+      if (unfolded().has(formula.id) && placeholder && onScreen(placeholder)) return page.toggle(formula.id)
+      setUnfolded(unfolded().add(formula.id))
       requestAnimationFrame(() => placeholder?.scrollIntoView({ behavior: "smooth", block: "center" }))
     },
   }
@@ -98,6 +99,11 @@ export function Explanation(props: { name: string; markdown: string; runtime: Ru
       <div class="prose" ref={prose} />
     </article>
   )
+}
+
+function onScreen(element: Element): boolean {
+  const box = element.getBoundingClientRect()
+  return box.bottom > 0 && box.top < window.innerHeight
 }
 
 type Read =

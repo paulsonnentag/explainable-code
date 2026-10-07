@@ -39,10 +39,9 @@ doc = Automerge.change(doc, { time: now - hour }, (d) => {
 return repo.import(Automerge.save(doc))
 ```
 
-Each change is stamped with the time it was made. Together the changes are
-the recipe's
-[history = Automerge.getHistory(recipe).map(({ change }) => ({ hash: change.hash, time: new Date(change.time * 1000) }))],
-oldest first:
+Together the changes are the recipe's [history = Automerge.getHistory(recipe)],
+oldest first. Each entry is a `change` and a `snapshot` of the recipe after
+it; the change's `time` is when it was made, in seconds:
 
 [=history]
 

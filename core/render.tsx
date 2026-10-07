@@ -1,7 +1,7 @@
 // What goes in a formula's placeholder: an embed's value, drawn by the default
 // renderer, or a name as a chip.
 
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type Accessor, type JSX } from "solid-js"
 import { render } from "solid-js/web"
 import type { State } from "./evaluate"
 import type { Shows } from "./host"
@@ -22,7 +22,7 @@ export type Page = {
   unfolded(id: number): boolean
   /** Unfolds a formula's code, or folds it again. */
   toggle(id: number): void
-  /** Unfolds a name's code where it is declared, and scrolls there. */
+  /** Unfolds a name's code where it is declared and scrolls there, or folds it if it is already unfolded on screen. */
   reveal(name: string): void
 }
 
@@ -39,9 +39,7 @@ export function FormulaSlot(props: { formula: Formula; block: boolean; page: Pag
   if (formula.name && formula.block)
     return (
       <Show when={page.unfolded(formula.id)}>
-        <div class="unfold unfold-block">
-          <Unfolded formula={formula} page={page} />
-        </div>
+        <BlockCard formula={formula} name={formula.name} page={page} />
       </Show>
     )
   if (formula.name) return <Chip name={formula.name} page={page} declaration />
@@ -116,6 +114,7 @@ export function Chip(props: { name: string; page: Page; declaration?: boolean })
       <span
         ref={chip}
         class="chip"
+        data-name={props.name}
         classList={{
           highlighted: props.page.hovered() === props.name,
           pending: state()?.status === "pending",
@@ -145,6 +144,31 @@ export function Chip(props: { name: string; page: Page; declaration?: boolean })
         </Show>
       </Show>
     </>
+  )
+}
+
+/** A block declaration's code, its caret pointing up at the name's chip in the paragraph above, if there is one. */
+function BlockCard(props: { formula: Formula; name: string; page: Page }) {
+  const [caret, setCaret] = createSignal<number>()
+  let card!: HTMLDivElement
+  onMount(() => {
+    let above = card.parentElement?.previousElementSibling
+    while (above?.classList.contains("unfold")) above = above.previousElementSibling
+    const chips = above?.querySelectorAll<HTMLElement>(`.chip[data-name="${CSS.escape(props.name)}"]`)
+    const chip = chips?.[chips.length - 1]
+    if (!chip) return
+    const box = chip.getBoundingClientRect()
+    setCaret(Math.max(16, box.left + box.width / 2 - card.getBoundingClientRect().left))
+  })
+  return (
+    <div
+      ref={card}
+      class="unfold"
+      classList={{ "unfold-block": caret() === undefined }}
+      style={caret() === undefined ? undefined : { "--caret": `${caret()}px` }}
+    >
+      <Unfolded formula={props.formula} page={props.page} />
+    </div>
   )
 }
 

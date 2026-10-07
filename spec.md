@@ -117,7 +117,9 @@ pending or failed. A reference renders as the same chip.
   unfolds below the line, as a card whose caret points up at the chip. Clicking
   again folds it. Chips have no selected state.
 - **Clicking** any other chip (a reference in the prose, a caption, a url in
-  data) unfolds the code at the declaration and scrolls there.
+  data) unfolds the code at the declaration and scrolls there. Clicking it
+  again folds the code; if the code is unfolded but off screen, the click
+  scrolls to it instead.
 
 A formula's code has one place on the page, where it is declared, and is
 either unfolded there or not.

@@ -74,9 +74,13 @@ introduces it, then embed the name (`[groups = …]`, then `[=groups]`). The
 frame is captioned with that name, and hovering the name in the prose lights
 the frame up.
 
-Show values in a form the reader can check against the prose. If the prose
-says "more than ten minutes apart", the history should show times, not just
-hashes.
+Show values as they are. Embed what the library or the behavior actually
+returns, not a version mapped, sliced or reformatted for the page: a reader
+who sees `Automerge.getHistory(recipe)` can call it themselves and get the
+same thing, while `getHistory(recipe).map(…)` shows them something nothing
+produces. If the raw value is hard to read, say in the prose which fields to
+look at and what they mean (`time` is in seconds), and let the default
+renderer fold the rest.
 
 ## Declare names where they're introduced
 

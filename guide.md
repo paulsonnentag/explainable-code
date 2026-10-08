@@ -33,8 +33,8 @@ Words that usually give it away: "below", "here we", "let's", "this example",
 Everything the explanation adds to the environment is explained in the
 prose. Go through the list and find the sentence for each item:
 
-- **Every behavior in the frontmatter**: when it applies, what it reads, what
-  it writes.
+- **Every run**: when its behavior applies, what it read, what it wrote and
+  put.
 - **Every document a behavior creates**: what it holds, where it is linked
   from, and its type.
 - **Every field a behavior writes and every slot it puts**: what the value
@@ -70,8 +70,12 @@ document, next to the views that draw them. A reader who sees only the views
 has to take the mechanism on trust.
 
 Show the behavior itself, too: declare its run on a document with
-`Run(behavior, document)` and embed it raw next to the behavior view, so the
-reader sees what it read and what it wrote before the prose says why.
+`Run(behavior, document)` in the sentence that introduces what it does, and
+embed the run, so the reader sees what it read and what it wrote before the
+prose says why. A run is the only way a behavior happens on the page, so an
+action like forking is a run too, declared where the prose introduces it.
+Give a run what it needs as props (`Run(fork, recipe, { name: "Less sugar" })`)
+and say what each one is for.
 
 Name every value you embed on its own: declare it in the sentence that
 introduces it, then embed the name (`[groups = …]`, then `[=groups]`). The

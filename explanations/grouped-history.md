@@ -1,11 +1,6 @@
----
-behaviors:
-  - /behaviors/history/group/index.ts
----
-
 # Grouped history
 
-[=View("/views/markdown/index.ts", recipe)] [=View("/views/history/index.ts", grouped_history)]
+[=View("/views/markdown/index.ts", recipe)] [=View("/views/history/index.ts", grouped_history)] [=grouping]
 
 Every edit to a document is a change, and a sentence is dozens of them, so a
 history read change by change is too fine to follow. Grouped history gathers
@@ -47,8 +42,10 @@ it; the change's `time` is when it was made, in seconds:
 
 ## Grouping by time
 
-A new group starts wherever two neighbouring changes are more than ten minutes
-apart. These are the recipe's [groups = grouped_history.groups], newest first:
+The grouping is done by a behavior, here running on the recipe:
+[grouping = Run("/behaviors/history/group/index.ts", recipe)]. A new group
+starts wherever two neighbouring changes are more than ten minutes apart.
+These are the recipe's [groups = grouped_history.groups], newest first:
 
 [=groups]
 
@@ -73,12 +70,10 @@ recipe links to it at `@patchwork.groupedHistory`:
 
 ## The behavior
 
-Both documents are written by one behavior, which runs on every document as
-soon as the document is seen. This is its
-[grouping_run = Run("/behaviors/history/group/index.ts", recipe)], everything it
-read and wrote while running on the recipe:
+Both documents are written by the [grouping]. This is everything it read and
+wrote while running on the recipe:
 
-[=View("/views/behavior/index.ts", grouping_run)] [=grouping_run]
+[=grouping]
 
 It read the recipe's `@patchwork.type`, which said the recipe is something to
 group, and its `@patchwork.groupedHistory`, which wasn't there yet. So it

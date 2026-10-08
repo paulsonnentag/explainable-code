@@ -69,6 +69,10 @@ export function isHandle(value: unknown): value is Handle {
   )
 }
 
+export function isDocBacked(value: unknown): value is DocBacked {
+  return isHandle(value) && typeof value.url === "string" && "doc" in value
+}
+
 /** The value at `path` inside `root`; undefined if any step is missing. */
 export function walk(root: unknown, path: string[]): unknown {
   let current: unknown = root

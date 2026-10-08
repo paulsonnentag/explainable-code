@@ -158,6 +158,80 @@
   min-width: 0;
 }
 
+/* A run: "read" and "write" labels down the left, one line per key. */
+
+.run-body {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-content: start;
+  gap: 10px 16px;
+  max-height: 380px;
+  overflow: auto;
+  padding: 14px 16px;
+  color: var(--ink-2);
+  font: 12.5px/1.7 var(--mono);
+}
+
+.run-label {
+  color: var(--faint);
+  font: 600 11px/2.1 var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.run-rows {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.run-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.run-line:hover .run-caret {
+  color: var(--ink);
+}
+
+.run-caret {
+  width: 0.8em;
+  flex: none;
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.run-plus {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.run-key {
+  color: #57534e;
+}
+
+.run-muted {
+  color: var(--faint);
+}
+
+.run-detail {
+  margin: 2px 0 6px calc(0.8em + 6px);
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
+.run-body .chip {
+  font-family: var(--sans);
+  font-size: 12.5px;
+}
+
+.caption-as {
+  color: var(--faint);
+}
+
 .embed-inline .json {
   display: inline;
 }

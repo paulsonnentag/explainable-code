@@ -1,15 +1,17 @@
 // The environment, as formulas see it. The explanation gets a scope of its
-// own; every document a formula resolves to gets a scope below it, with the
-// explanation's behaviors attached and their runs recorded; `View` mounts a
-// view by url on a scope of its own, and `Run` reads a recorded run.
+// own; every document a formula resolves to gets a scope below it. `View`
+// mounts a view in a scope of its own, and `Run` runs a behavior in a scope of
+// its own, below a document's or below another run's: what the behavior puts
+// is seen there and by the views given the run, nowhere else.
 
 import * as Automerge from "@automerge/automerge"
-import { createRoot, createSignal, untrack, type Accessor, type Setter } from "solid-js"
-import type { Env, Run } from "./environment"
+import { createRoot, createSignal, untrack, type Accessor } from "solid-js"
+import type { Env, Run as Behavior } from "./environment"
 import type { Host as Evaluator } from "./evaluate"
-import { isHandle, type DocBacked } from "./handle"
+import { isDocBacked, type DocBacked } from "./handle"
 import type { Load } from "./loader"
 import { recording, type BehaviorRun } from "./record"
+import { runValue, type RunValue } from "./run"
 
 /** What the app gives the core: the root scope, holding `repo`, and how urls load. */
 export type Runtime = { root: Env; load: Load }
@@ -19,9 +21,6 @@ export type View = (env: Env, props: Props) => Node
 
 export type Props = Record<string, unknown>
 
-/** A behavior from the frontmatter, loaded. */
-export type Loaded = { url: string; run: Run }
-
 export type Host = Evaluator & {
   /** The name declared for a document's url, or for an object a declaration resolved to. Tracked. */
   nameOf(urlOrValue: unknown): string | undefined
@@ -29,19 +28,23 @@ export type Host = Evaluator & {
 }
 
 type DocumentScope = { scope: Env; snapshot: Accessor<unknown> }
-type Mount = { node: Node; dispose(): void }
+/** Something a formula asked for that lives until the formula stops asking: a view's mount, a run. */
+type Kept<T> = { value: T; dispose(): void }
+/** What a view or a run is given, as the host places it: its document, the scope it goes below, and a key. */
+type Target = { handle: DocBacked | undefined; scope: Env; key: string; run: boolean }
 
-export function createHost(runtime: Runtime, behaviors: Loaded[], name: string): Host {
+export function createHost(runtime: Runtime, name: string): Host {
   const scope = runtime.root.fork(name)
   const stops: (() => void)[] = []
   const slots = new Map<string, Accessor<unknown>>()
   const documents = new Map<string, DocumentScope>()
   const handles = new WeakMap<object, DocBacked>()
+  const runs = new WeakMap<object, { scope: Env; handle: DocBacked; id: number }>()
   const [names, setNames] = createSignal(new Map<unknown, string>(), { equals: false })
-  const mounts = new Map<number, Map<string, Mount>>()
-  const loose: Mount[] = []
-  const runs = new Map<string, [Accessor<BehaviorRun | undefined>, Setter<BehaviorRun | undefined>]>()
+  const kept = new Map<number, Map<string, Kept<unknown>>>()
+  const loose: Kept<unknown>[] = []
   let active: { formula: number; asked: Set<string> } | undefined
+  let nextRun = 0
 
   const globals = new Map<string, unknown>([
     ["env", trackedEnv(scope, slot)],
@@ -66,10 +69,10 @@ export function createHost(runtime: Runtime, behaviors: Loaded[], name: string):
       const run = (active = { formula, asked: new Set() })
       try {
         const value = fn()
-        for (const [key, mount] of mounts.get(formula) ?? []) {
+        for (const [key, thing] of kept.get(formula) ?? []) {
           if (run.asked.has(key)) continue
-          mount.dispose()
-          mounts.get(formula)!.delete(key)
+          thing.dispose()
+          kept.get(formula)!.delete(key)
         }
         return value
       } finally {
@@ -78,8 +81,8 @@ export function createHost(runtime: Runtime, behaviors: Loaded[], name: string):
     },
     nameOf: (urlOrValue) => names().get(urlOrValue),
     destroy() {
-      for (const own of mounts.values()) for (const mount of own.values()) mount.dispose()
-      for (const mount of loose) mount.dispose()
+      for (const own of kept.values()) for (const thing of own.values()) thing.dispose()
+      for (const thing of loose) thing.dispose()
       for (const stop of stops) stop()
       scope.destroy()
     },
@@ -98,7 +101,7 @@ export function createHost(runtime: Runtime, behaviors: Loaded[], name: string):
     return read()
   }
 
-  /** The document's scope, made on first sight: the behaviors run once before anyone reads the snapshot. */
+  /** The document's scope, made on first sight, with `data` bound to it. */
   function documentOf(handle: DocBacked): DocumentScope {
     const known = documents.get(handle.url)
     if (known) return known
@@ -107,15 +110,6 @@ export function createHost(runtime: Runtime, behaviors: Loaded[], name: string):
     const found = { scope: own, snapshot }
     documents.set(handle.url, found)
     own.put("data", handle)
-    untrack(() => {
-      for (const behavior of behaviors) {
-        const [, setRun] = runOf(handle.url, behavior.url)
-        own.attach(
-          recording(behavior.run, behavior.url, handle, (run) => setRun(run)),
-          behavior.url,
-        )
-      }
-    })
     stops.push(
       handle.subscribe((doc) => {
         if (typeof doc === "object" && doc !== null) handles.set(doc, handle)
@@ -125,52 +119,91 @@ export function createHost(runtime: Runtime, behaviors: Loaded[], name: string):
     return found
   }
 
-  /** The last run of the behavior at `url` on `document`, as recorded. Tracked. */
-  function Run(url: string, document: unknown): BehaviorRun {
-    const handle = handleOf(document)
-    if (!handle) throw new Error("Run(url, document) needs a document")
-    if (!behaviors.some((behavior) => behavior.url === url)) throw new Error(`${url} isn't one of this explanation's behaviors`)
-    documentOf(handle)
-    return runOf(handle.url, url)[0]()!
-  }
-
-  function runOf(document: string, behavior: string) {
-    const key = `${document} ${behavior}`
-    let run = runs.get(key)
-    if (!run) runs.set(key, (run = createSignal<BehaviorRun>()))
-    return run
+  /** Where a view or a run on `value` goes: below a run's scope, a document's, or the explanation's. */
+  function targetOf(value: unknown): Target {
+    const run = typeof value === "object" && value !== null ? runs.get(value) : undefined
+    if (run) return { handle: run.handle, scope: run.scope, key: `run ${run.id}`, run: true }
+    const handle = handleOf(value)
+    if (handle) return { handle, scope: documentOf(handle).scope, key: handle.url, run: false }
+    return { handle: undefined, scope, key: identity(value), run: false }
   }
 
   function handleOf(value: unknown): DocBacked | undefined {
     return isDocBacked(value) ? value : typeof value === "object" && value !== null ? handles.get(value) : undefined
   }
 
-  /** Mounts the view at `url` on `data`. A formula that asks again for the same mount gets the same node. */
-  function View(url: string, data: unknown, props: Props = {}): Node {
-    const handle = handleOf(data)
+  /** What a formula asks for, kept for as long as it keeps asking: the same key gets the same thing back. */
+  function keep<T>(key: string, make: () => Kept<T>): T {
     if (!active) {
-      const mount = mountView(url, handle, data, props)
-      loose.push(mount)
-      return mount.node
+      const thing = make()
+      loose.push(thing)
+      return thing.value
     }
-    const key = JSON.stringify([url, handle ? handle.url : identity(data), props])
-    let own = mounts.get(active.formula)
-    if (!own) mounts.set(active.formula, (own = new Map()))
+    let own = kept.get(active.formula)
+    if (!own) kept.set(active.formula, (own = new Map()))
     active.asked.add(key)
-    let mount = own.get(key)
-    if (!mount) own.set(key, (mount = mountView(url, handle, data, props)))
-    return mount.node
+    let thing = own.get(key)
+    if (!thing) own.set(key, (thing = make()))
+    return thing.value as T
   }
 
-  /** A view on a scope of its own: below the document's, or holding `data`; with `name` if `data` has one. */
-  function mountView(url: string, handle: DocBacked | undefined, data: unknown, props: Props): Mount {
+  /** Mounts the view at `url` on `data`. A formula that asks again for the same mount gets the same node. */
+  function View(url: string, data: unknown, props: Props = {}): Node {
+    const target = targetOf(data)
+    return keep(`view ${JSON.stringify([url, target.key, props])}`, () => mountView(url, target, data, props))
+  }
+
+  /**
+   * Runs the behavior at `url` on `document` (a document, or a run), in a scope
+   * of its own with `props` bound as slots. Asked again for the same run, it
+   * returns the same one: a promise of the run, which reads as what the
+   * behavior did and draws itself.
+   */
+  function Run(url: string, document: unknown, props: Props = {}): Promise<RunValue> {
+    const target = targetOf(document)
+    if (!target.handle) throw new Error("Run(behavior, document) needs a document or a run")
+    const key = `run ${JSON.stringify([url, target.key, Object.entries(props).map(([k, v]) => [k, keyOf(v)])])}`
+    return keep(key, () => startRun(url, target as Target & { handle: DocBacked }, props))
+  }
+
+  function keyOf(value: unknown): string {
+    return targetOf(value).key
+  }
+
+  function startRun(url: string, target: Target & { handle: DocBacked }, props: Props): Kept<Promise<RunValue>> {
+    const own = target.scope.fork("run")
+    for (const [key, value] of Object.entries(props)) own.put(key, handleOf(value) ?? value)
+    const [record, setRecord] = createSignal<BehaviorRun>()
+    const value = runValue(record, url, target.handle.url)
+    runs.set(value, { scope: own, handle: target.handle, id: nextRun++ })
+    let gone = false
+    const started = runtime.load<Behavior>(url).then((behavior) => {
+      if (gone) return value
+      untrack(() =>
+        own.attach(
+          recording(behavior, url, target.handle.url, (run) => setRecord(run)),
+          url,
+        ),
+      )
+      return value
+    })
+    return {
+      value: started,
+      dispose() {
+        gone = true
+        own.destroy()
+      },
+    }
+  }
+
+  /** A view in a scope of its own, below what it was given; `name` is bound to the name that has, if any. */
+  function mountView(url: string, target: Target, data: unknown, props: Props): Kept<Node> {
     const node = document.createElement("div")
     node.className = "view"
     node.append(spinner())
-    const own = (handle ? documentOf(handle).scope : scope).fork("view")
-    if (!handle) own.put("data", data)
-    const name = untrack(names).get(handle ? handle.url : data)
-    if (name !== undefined) own.put("name", name)
+    const own = target.scope.fork("view")
+    if (!target.handle) own.put("data", data)
+    own.put("name", untrack(names).get(target.handle && !target.run ? target.handle.url : data))
     const env = readOnly(own)
     let gone = false
     let disposeView: (() => void) | undefined
@@ -187,7 +220,7 @@ export function createHost(runtime: Runtime, behaviors: Loaded[], name: string):
         if (!gone) node.replaceChildren(failure(error))
       })
     return {
-      node,
+      value: node,
       dispose() {
         gone = true
         disposeView?.()
@@ -195,10 +228,6 @@ export function createHost(runtime: Runtime, behaviors: Loaded[], name: string):
       },
     }
   }
-}
-
-export function isDocBacked(value: unknown): value is DocBacked {
-  return isHandle(value) && typeof value.url === "string" && "doc" in value
 }
 
 /** The explanation's scope as `env` in a formula: reads are tracked, puts are refused. */

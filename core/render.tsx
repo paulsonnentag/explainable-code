@@ -1,6 +1,7 @@
 // What goes in a formula's placeholder: an embed's value, drawn by the default
-// renderer, or a name as a chip. A node is mounted as it is; views caption
-// themselves, drawing names with `<explanation-name>`.
+// renderer, or a name as a chip. A node is mounted as it is, and a value that
+// draws itself (see `DRAW`) is drawn that way; views caption themselves,
+// drawing names with `<explanation-name>`.
 
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type Accessor, type JSX } from "solid-js"
 import { render } from "solid-js/web"
@@ -23,6 +24,11 @@ export type Page = {
   /** Unfolds a name's code where it is declared and scrolls there, or folds it if it is already unfolded on screen. */
   reveal(name: string): void
 }
+
+/** A value with a function at this key draws itself: the renderer calls it with the page. */
+export const DRAW = Symbol.for("explanation/draw")
+
+export type Drawable = { [DRAW](page: Page): JSX.Element }
 
 const LIMIT = 200 // entries of an array or object drawn before the rest is summed up
 const HASH = /^[0-9a-f]{64}$/
@@ -288,6 +294,7 @@ function Shown(props: { state: () => State; page: Page; block: boolean; named: s
 
 function drawTop(value: unknown, page: Page, block: boolean, named: string | undefined): JSX.Element {
   if (value instanceof Node) return value
+  if (isDrawable(value)) return value[DRAW](page)
   const content = isComposite(value) ? (
     <span class="json">
       <Json value={value} page={page} depth={0} />
@@ -301,7 +308,7 @@ function drawTop(value: unknown, page: Page, block: boolean, named: string | und
   if (!named)
     return (
       <div class="frame frame-data">
-        <Failure error={new Error("Only a node, such as a view, or a named value can be embedded on its own. Declare this value and embed its name.")} />
+        <Failure error={new Error("Only a view, a run or a named value can be embedded on its own. Declare this value and embed its name.")} />
       </div>
     )
   return (
@@ -314,7 +321,7 @@ function drawTop(value: unknown, page: Page, block: boolean, named: string | und
   )
 }
 
-function Failure(props: { error: unknown }) {
+export function Failure(props: { error: unknown }) {
   const error = props.error
   return (
     <span class="value-error" title={error instanceof Error ? error.stack : undefined}>
@@ -324,7 +331,7 @@ function Failure(props: { error: unknown }) {
 }
 
 /** Structured data, written out like JSON. Arrays and objects fold by clicking their bracket. */
-function Json(props: { value: unknown; page: Page; depth: number }): JSX.Element {
+export function Json(props: { value: unknown; page: Page; depth: number }): JSX.Element {
   if (!isComposite(props.value)) return leaf(props.value, props.page)
   const array = Array.isArray(props.value)
   const entries: [string, unknown][] = array
@@ -395,16 +402,28 @@ function leaf(value: unknown, page: Page): JSX.Element {
   return <span>{String(value)}</span>
 }
 
-/** A document's url: its name's chip once the document is declared, the url until then. */
-function Url(props: { url: string; page: Page }) {
+/** A document's url: its name's chip once the document is declared, the url, shortened, until then. */
+export function Url(props: { url: string; page: Page }) {
+  const short = props.url.length > 22 ? `${props.url.slice(0, 18)}…` : props.url
   return (
-    <Show when={props.page.nameOf(props.url)} fallback={<span class="json-string">{JSON.stringify(props.url)}</span>}>
+    <Show
+      when={props.page.nameOf(props.url)}
+      fallback={
+        <span class="json-string" title={props.url}>
+          {JSON.stringify(short)}
+        </span>
+      }
+    >
       {(name) => <Chip name={name()} page={props.page} />}
     </Show>
   )
 }
 
-function isComposite(value: unknown): boolean {
+function isDrawable(value: unknown): value is Drawable {
+  return typeof value === "object" && value !== null && typeof (value as Drawable)[DRAW] === "function"
+}
+
+export function isComposite(value: unknown): boolean {
   return (
     typeof value === "object" &&
     value !== null &&

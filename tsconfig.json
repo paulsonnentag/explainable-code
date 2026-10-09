@@ -11,7 +11,8 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["core", "src", "behaviors", "views", "scripts", "vite.config.ts"]
+  "include": ["src", "vite.config.ts"]
 }

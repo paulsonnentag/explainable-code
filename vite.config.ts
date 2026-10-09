@@ -1,9 +1,9 @@
+import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
 import solid from "vite-plugin-solid"
-import wasm from "vite-plugin-wasm"
 
 export default defineConfig({
-  plugins: [wasm(), solid()],
+  plugins: [solid()],
+  resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   build: { target: "esnext" },
-  optimizeDeps: { exclude: ["@automerge/automerge"] },
 })
